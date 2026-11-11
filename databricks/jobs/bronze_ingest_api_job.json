@@ -1,0 +1,16 @@
+{
+  "name": "bronze_ingest_api",
+  "description": "Ingest data from external API into bronze (raw) zone",
+  "new_cluster": {
+    "spark_version": "12.2.x-scala2.12",
+    "node_type_id": "Standard_D3_v2",
+    "num_workers": 1,
+    "autotermination_minutes": 10
+  },
+  "notebook_task": {
+    "notebook_path": "/Shared/data-platform/notebooks/bronze/ingest_unstructured",
+    "base_parameters": {}
+  },
+  "timeout_seconds": 1800,
+  "max_retries": 1
+}

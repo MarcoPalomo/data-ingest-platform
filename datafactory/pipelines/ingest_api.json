@@ -1,0 +1,21 @@
+{
+  "name": "ingest_api",
+  "properties": {
+    "type": "Pipeline",
+    "description": "Data Factory pipeline to ingest data from external API via Databricks",
+    "activities": [
+      {
+        "name": "TriggerDatabricksAPIJob",
+        "type": "DatabricksNotebook",
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/bronze/ingest_unstructured",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "bronze_ingest_sql",
+  "description": "Ingest customer and event tables from Azure SQL into bronze (raw) zone",
+  "new_cluster": {
+    "spark_version": "12.2.x-scala2.12",
+    "node_type_id": "Standard_D3_v2",
+    "num_workers": 2,
+    "autotermination_minutes": 15
+  },
+  "notebook_task": {
+    "notebook_path": "/Shared/data-platform/notebooks/bronze/ingest_sql",
+    "base_parameters": {}
+  },
+  "timeout_seconds": 3600,
+  "max_retries": 1
+}

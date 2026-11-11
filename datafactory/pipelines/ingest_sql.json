@@ -1,0 +1,55 @@
+{
+  "name": "ingest_sql",
+  "properties": {
+    "type": "Pipeline",
+    "description": "Data Factory pipeline to ingest data from Azure SQL",
+    "activities": [
+      {
+        "name": "CopyFromSQL",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "sql_customers_dataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "blob_raw_dataset",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "AzureSqlSource",
+            "sqlReaderQuery": "SELECT * FROM customers"
+          },
+          "sink": {
+            "type": "ParquetSink",
+            "storeSettings": {
+              "type": "AzureBlobFSWriteSettings"
+            }
+          }
+        }
+      },
+      {
+        "name": "TriggerDatabricksBronzeJob",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "CopyFromSQL",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/bronze/ingest_sql",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "bronze_job",
+  "notebook_task": {
+    "notebook_path": "/Shared/data-platform/notebooks/bronze/ingest_sql"
+  }
+}

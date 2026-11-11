@@ -1,0 +1,111 @@
+{
+  "name": "orchestrator_master",
+  "properties": {
+    "type": "Pipeline",
+    "description": "Master orchestration pipeline: bronze -> data quality (Great Expectations) -> silver -> gold",
+    "activities": [
+      {
+        "name": "IngestSQL",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "ingest_sql",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "IngestAPI",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "ingest_api",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "ValidateBronze",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "IngestSQL",
+            "dependencyConditions": ["Succeeded"]
+          },
+          {
+            "activity": "IngestAPI",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/dq/validate_data_quality",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "TransformSilverCustomers",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "ValidateBronze",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/silver/transform_customers",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "TransformSilverEvents",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "ValidateBronze",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/silver/transform_events",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      },
+      {
+        "name": "CreateGold",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "TransformSilverCustomers",
+            "dependencyConditions": ["Succeeded"]
+          },
+          {
+            "activity": "TransformSilverEvents",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "typeProperties": {
+          "notebookPath": "/Shared/data-platform/notebooks/gold/customer_360_model",
+          "baseParameters": {}
+        },
+        "linkedServiceName": {
+          "referenceName": "databricks_linked_service",
+          "type": "LinkedServiceReference"
+        }
+      }
+    ]
+  }
+}

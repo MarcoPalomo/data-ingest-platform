@@ -1,0 +1,16 @@
+{
+  "name": "gold_customer_360",
+  "description": "Create unified customer 360 view for dashboards and APIs",
+  "new_cluster": {
+    "spark_version": "12.2.x-scala2.12",
+    "node_type_id": "Standard_D8s_v3",
+    "num_workers": 4,
+    "autotermination_minutes": 15
+  },
+  "notebook_task": {
+    "notebook_path": "/Shared/data-platform/notebooks/gold/customer_360_model",
+    "base_parameters": {}
+  },
+  "timeout_seconds": 3600,
+  "max_retries": 1
+}
