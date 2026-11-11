@@ -404,9 +404,9 @@ uv run --only-group deploy databricks workspace ls /Shared/data-platform/noteboo
 
 `pyspark` 3.3.x is only published as a ~280 MB source distribution, which uv downloads to read its metadata. Later runs use the uv cache (`enable-cache: true` in the workflows).
 
-### Local tests fail with `NoSuchMethodException: java.nio.DirectByteBuffer.<init>(long,int)`
+### Tests fail with `NoSuchMethodException: java.nio.DirectByteBuffer.<init>(long,int)` or `getSubject is not supported`
 
-PySpark 3.3 supports Java 8, 11 and 17 only, and this error means you are on Java 21. Point `JAVA_HOME` to a JDK 17:
+PySpark 3.3 supports Java 8, 11 and 17 only. These errors mean a newer JDK is in use: the first appears on Java 21, the second on Java 23 and later. In CI, the jobs that run pytest on the runner pin Java 17 with `actions/setup-java`. Locally, point `JAVA_HOME` to a JDK 17:
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64 PATH=/usr/lib/jvm/temurin-17-jdk-amd64/bin:$PATH

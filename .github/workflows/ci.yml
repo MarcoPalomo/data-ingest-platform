@@ -7,6 +7,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Java 17
+        # PySpark 3.3 (aligned with DBR 12.2) supports Java 8/11/17 only; the runner default JDK is newer
+        # and fails with "getSubject is not supported"
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
