@@ -1,0 +1,306 @@
+name: CD - Deploy to Azure (GitOps)
+
+# Trigger: merge to main (automatically) or manual dispatch (for testing)
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (dev/staging/prod)"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+# Environment configuration: set Azure subscription, resource group, etc. per environment
+env:
+  TERRAFORM_VERSION: "1.6"
+
+jobs:
+  # Determine which environment(s) to deploy to based on branch/trigger
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-envs.outputs.environments }}
+    steps:
+      - name: Set target environments
+        id: set-envs
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "environments=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            # On push to main: deploy to dev first, optionally staging/prod via manual gates
+            echo "environments=[\"dev\"]" >> $GITHUB_OUTPUT
+          fi
+
+  # Terraform plan & apply: infrastructure deployment
+  terraform-deploy:
+    name: Terraform Deploy - ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: determine-environment
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
+      max-parallel: 1
+    environment:
+      name: terraform-${{ matrix.environment }}
+      url: https://portal.azure.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        working-directory: ./infra/terraform
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets[format('TFSTATE_RG_{0}', matrix.environment)] }}" \
+            -backend-config="storage_account_name=${{ secrets[format('TFSTATE_SA_{0}', matrix.environment)] }}" \
+            -backend-config="container_name=${{ secrets[format('TFSTATE_CONTAINER_{0}', matrix.environment)] }}"
+
+      - name: Terraform format check
+        working-directory: ./infra/terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform validate
+        working-directory: ./infra/terraform
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ./infra/terraform
+        run: |
+          terraform plan \
+            -var-file=envs/${{ matrix.environment }}.tfvars \
+            -out=tfplan_${{ matrix.environment }}
+
+      - name: Upload Terraform plan artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: infra/terraform/tfplan_${{ matrix.environment }}
+          retention-days: 5
+
+      - name: Terraform apply (non-prod auto-approved)
+        if: github.event_name == 'push' && matrix.environment != 'prod'
+        working-directory: ./infra/terraform
+        run: terraform apply -auto-approve tfplan_${{ matrix.environment }}
+
+      - name: Terraform apply (prod manual gate)
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
+        working-directory: ./infra/terraform
+        run: |
+          echo "⚠️  Production deployment requires explicit approval."
+          terraform apply -auto-approve tfplan_${{ matrix.environment }}
+
+      - name: Capture Terraform outputs
+        if: always()
+        working-directory: ./infra/terraform
+        run: terraform output -json > outputs-${{ matrix.environment }}.json
+
+      - name: Upload Terraform outputs
+        uses: actions/upload-artifact@v3
+        with:
+          name: tf-outputs-${{ matrix.environment }}
+          path: infra/terraform/outputs-${{ matrix.environment }}.json
+          retention-days: 5
+
+  # Deploy Databricks assets (notebooks, jobs)
+  databricks-deploy:
+    name: Databricks Deploy - ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: [determine-environment, terraform-deploy]
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
+      max-parallel: 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Terraform outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: tf-outputs-${{ matrix.environment }}
+
+      - name: Set Databricks workspace URL from outputs
+        id: db-config
+        run: |
+          WORKSPACE_URL=$(jq -r '.databricks_workspace_id.value' outputs-${{ matrix.environment }}.json)
+          echo "workspace_url=$WORKSPACE_URL" >> $GITHUB_OUTPUT
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Databricks CLI (uv "deploy" group, version pinned in pyproject.toml / uv.lock)
+        run: |
+          uv sync --frozen --only-group deploy
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Azure login (OIDC) for Databricks token
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Retrieve Databricks token from Key Vault
+        id: get-token
+        run: |
+          KV_NAME="${{ secrets[format('KEYVAULT_NAME_{0}', matrix.environment)] }}"
+          TOKEN=$(az keyvault secret show --vault-name "$KV_NAME" --name "databricks-token" --query value -o tsv)
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Upload Databricks notebooks
+        env:
+          DATABRICKS_HOST: ${{ steps.db-config.outputs.workspace_url }}
+          DATABRICKS_TOKEN: ${{ steps.get-token.outputs.token }}
+        run: |
+          # Must match notebook_path in databricks/jobs/*.json and notebookPath in datafactory/pipelines/*.json
+          NOTEBOOK_ROOT="/Shared/data-platform/notebooks"
+          for layer in bronze silver gold dq; do
+            databricks workspace mkdirs "$NOTEBOOK_ROOT/$layer"
+            for notebook in databricks/notebooks/$layer/*.py; do
+              echo "Importing $notebook..."
+              databricks workspace import --overwrite --language PYTHON "$notebook" "$NOTEBOOK_ROOT/$layer/$(basename $notebook .py)"
+            done
+          done
+
+      - name: Upload Great Expectations suites
+        env:
+          DATABRICKS_HOST: ${{ steps.db-config.outputs.workspace_url }}
+          DATABRICKS_TOKEN: ${{ steps.get-token.outputs.token }}
+        run: |
+          # Read by databricks/notebooks/dq/validate_data_quality.py (widget suites_dir)
+          databricks fs cp -r --overwrite great_expectations/expectations dbfs:/FileStore/data-platform/great_expectations/expectations
+
+      - name: Deploy Databricks jobs
+        env:
+          DATABRICKS_HOST: ${{ steps.db-config.outputs.workspace_url }}
+          DATABRICKS_TOKEN: ${{ steps.get-token.outputs.token }}
+        run: |
+          for job_file in databricks/jobs/*.json; do
+            echo "Deploying job from $job_file..."
+            databricks jobs configure --json-file "$job_file" || databricks jobs create --json-file "$job_file"
+          done
+
+  # Deploy Data Factory artifacts (pipelines, linked services, datasets)
+  datafactory-deploy:
+    name: Data Factory Deploy - ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: [determine-environment, terraform-deploy]
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
+      max-parallel: 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Terraform outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: tf-outputs-${{ matrix.environment }}
+
+      - name: Extract Data Factory info from outputs
+        id: adf-config
+        run: |
+          ADF_NAME=$(jq -r '.datafactory_name.value' outputs-${{ matrix.environment }}.json)
+          RG_NAME=$(jq -r '.resource_group_name.value' outputs-${{ matrix.environment }}.json)
+          echo "adf_name=$ADF_NAME" >> $GITHUB_OUTPUT
+          echo "resource_group=$RG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Data Factory linked services
+        run: |
+          for ls_file in datafactory/linked-services/*.json; do
+            echo "Deploying linked service from $ls_file..."
+            az datafactory linked-service create \
+              --factory-name ${{ steps.adf-config.outputs.adf_name }} \
+              --resource-group ${{ steps.adf-config.outputs.resource_group }} \
+              --name "$(basename $ls_file .json)" \
+              --properties "@$ls_file" || echo "Linked service may already exist"
+          done
+
+      - name: Deploy Data Factory datasets
+        run: |
+          for ds_file in datafactory/datasets/*.json; do
+            echo "Deploying dataset from $ds_file..."
+            az datafactory dataset create \
+              --factory-name ${{ steps.adf-config.outputs.adf_name }} \
+              --resource-group ${{ steps.adf-config.outputs.resource_group }} \
+              --name "$(basename $ds_file .json)" \
+              --properties "@$ds_file" || echo "Dataset may already exist"
+          done
+
+      - name: Deploy Data Factory pipelines
+        run: |
+          for pipeline_file in datafactory/pipelines/*.json; do
+            echo "Deploying pipeline from $pipeline_file..."
+            az datafactory pipeline create \
+              --factory-name ${{ steps.adf-config.outputs.adf_name }} \
+              --resource-group ${{ steps.adf-config.outputs.resource_group }} \
+              --name "$(basename $pipeline_file .json)" \
+              --properties "@$pipeline_file" || echo "Pipeline may already exist"
+          done
+
+  # Post-deploy validation and smoke tests
+  post-deploy-validation:
+    name: Post-Deploy Validation - ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: [determine-environment, terraform-deploy, databricks-deploy, datafactory-deploy]
+    strategy:
+      matrix:
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
+    if: success()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run smoke tests
+        run: |
+          uv sync --frozen
+          uv run pytest tests/ -v -k "not integration"
+
+      - name: Send deployment notification
+        if: success()
+        run: |
+          echo "✅ Deployment to ${{ matrix.environment }} completed successfully!"
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          echo "❌ Deployment to ${{ matrix.environment }} failed!"

@@ -1,0 +1,42 @@
+[project]
+name = "data-ingestion-platform"
+version = "0.1.0"
+description = "Azure data ingestion platform: ADF + Databricks medallion (bronze/silver/gold) + Great Expectations"
+readme = "README.md"
+# Databricks Runtime 12.2 LTS = Python 3.9 / Spark 3.3.2
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    "requests>=2.28.0",
+    "pyodbc>=4.0.35",
+    # Aligned with the Databricks cluster runtime (12.2.x = Spark 3.3.2)
+    "pyspark>=3.3,<3.4",
+    # PySpark 3.3 is not compatible with pandas 2.x (DataFrame.iteritems removed)
+    "pandas>=1.5,<2",
+    # Must match the %pip pin in databricks/notebooks/dq/validate_data_quality.py
+    "great-expectations==0.18.21",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.2.0",
+    "pytest-spark>=0.6.0",
+    "pre-commit>=3.3",
+]
+# Used by the CD workflow to deploy notebooks, jobs and GX suites.
+# Legacy Python CLI (last release 0.18.0): the CD uses its syntax (workspace import SRC DST, fs cp).
+deploy = [
+    "databricks-cli==0.18.0",
+]
+
+[tool.pytest.ini_options]
+# Lets tests import `src.*` with plain `pytest` / `uv run pytest`
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end PySpark pipeline tests (run in CI with `pytest -m e2e`)",
+]
+
+[tool.uv]
+# Not a distributable package: uv only manages the environment
+package = false
+default-groups = ["dev"]

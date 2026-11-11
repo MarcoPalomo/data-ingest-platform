@@ -1,0 +1,41 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install (runtime + dev group, from uv.lock)
+        # Python version comes from .python-version
+        run: uv sync --frozen
+      - name: Run linters
+        run: uv run pre-commit run --all-files || true
+      - name: Run tests
+        run: uv run pytest -q
+
+  e2e:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run E2E tests in PySpark Docker image (testing-only)
+        run: |
+          IMAGE="jupyter/pyspark-notebook:latest"
+          echo "Pulling $IMAGE"
+          docker pull $IMAGE
+          echo "Running E2E tests inside container"
+          # The image only provides Java; pyspark and the other deps come from uv.lock.
+          # The venv lives outside the mounted repo so the host checkout is not polluted.
+          docker run --rm \
+            -v "${{ github.workspace }}":/home/jovyan/work \
+            -w /home/jovyan/work \
+            -e UV_PROJECT_ENVIRONMENT=/tmp/venv \
+            $IMAGE \
+            bash -lc "pip install --quiet uv && uv sync --frozen && uv run pytest -m e2e -q"
