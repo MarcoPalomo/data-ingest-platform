@@ -1,0 +1,13 @@
+{
+  "name": "api_events",
+  "properties": {
+    "type": "RestResource",
+    "linkedServiceName": {
+      "referenceName": "http_api",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "relativeUrl": "v1/events"
+    }
+  }
+}

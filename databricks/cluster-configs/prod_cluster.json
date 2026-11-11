@@ -1,0 +1,6 @@
+{
+  "cluster_name": "prod-cluster",
+  "spark_version": "12.2.x-scala2.12",
+  "node_type_id": "Standard_D8s_v3",
+  "num_workers": 8
+}

@@ -1,0 +1,27 @@
+{
+  "name": "http_api",
+  "properties": {
+    "type": "HttpServer",
+    "typeProperties": {
+      "url": "@{linkedService().url}",
+      "enableServerCertificateValidation": true,
+      "authenticationType": "Basic",
+      "userName": "@{linkedService().userName}",
+      "password": "@{linkedService().password}"
+    },
+    "parameters": {
+      "url": {
+        "type": "String",
+        "description": "API base URL"
+      },
+      "userName": {
+        "type": "String",
+        "description": "API username"
+      },
+      "password": {
+        "type": "SecureString",
+        "description": "API password or token"
+      }
+    }
+  }
+}

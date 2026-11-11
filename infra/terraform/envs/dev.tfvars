@@ -1,0 +1,8 @@
+resource_group_name = "rg-dip-dev"
+location = "eastus"
+storage_account_name = "dipdevstoragelake"
+workspace_name = "dip-databricks-dev"
+datafactory_name = "dip-datafactory-dev"
+keyvault_name = "dip-kv-dev"
+tenant_id = "<AZURE_TENANT_ID>"
+admin_object_id = "<OBJECT_ID_FOR_DEPLOYER>"

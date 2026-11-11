@@ -1,0 +1,6 @@
+{
+  "name": "data-ingestion-factory",
+  "properties": {
+    "description": "Azure Data Factory placeholder factory.json"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "cluster_name": "dev-cluster",
+  "spark_version": "12.2.x-scala2.12",
+  "node_type_id": "Standard_D3_v2",
+  "autotermination_minutes": 60,
+  "num_workers": 2
+}

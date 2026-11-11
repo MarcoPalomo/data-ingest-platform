@@ -1,0 +1,36 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  snyk-scan:
+    name: Snyk Dependency & Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js (for Snyk CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
+      - name: Run Snyk test (scan dependencies)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test --all-projects || true
+
+      - name: Snyk monitor (record snapshot to Snyk)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk monitor --all-projects
+
+      - name: Secret scanning placeholder
+        run: echo "Add secret-scanning (gitleaks) or other tools here"

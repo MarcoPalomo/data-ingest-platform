@@ -1,0 +1,20 @@
+{
+  "name": "storage",
+  "properties": {
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "@{linkedService().url}",
+      "accountKey": "@{linkedService().accountKey}"
+    },
+    "parameters": {
+      "url": {
+        "type": "String",
+        "description": "ADLS Gen2 URL (https://<account>.dfs.core.windows.net/)"
+      },
+      "accountKey": {
+        "type": "SecureString",
+        "description": "ADLS Gen2 account key from Key Vault"
+      }
+    }
+  }
+}

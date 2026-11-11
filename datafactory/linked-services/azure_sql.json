@@ -1,0 +1,19 @@
+{
+  "name": "azure_sql",
+  "properties": {
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "connectionString": "@{linkedService().connectionString}",
+      "connectVia": {
+        "referenceName": "AutoResolveIntegrationRuntime",
+        "type": "IntegrationRuntimeReference"
+      }
+    },
+    "parameters": {
+      "connectionString": {
+        "type": "SecureString",
+        "description": "Azure SQL connection string from Key Vault"
+      }
+    }
+  }
+}

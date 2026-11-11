@@ -1,0 +1,17 @@
+{
+  "name": "blob_raw",
+  "properties": {
+    "type": "Parquet",
+    "linkedServiceName": {
+      "referenceName": "storage",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "container": "raw",
+        "folderPath": "/"
+      }
+    }
+  }
+}

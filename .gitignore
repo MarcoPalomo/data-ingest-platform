@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env
+.venv/
+venv/
+.env.*
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+# Databricks
+*.dbc
+
+# VSCode
+.vscode/
+
+# Mac
+.DS_Store
+
+# pytests
+.cache
+htmlcov/
+
+# Secrets
+secrets.json
+
+# Others
+dist/
+build/
+

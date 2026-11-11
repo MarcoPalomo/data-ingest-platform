@@ -1,0 +1,13 @@
+{
+  "name": "sql_customers",
+  "properties": {
+    "type": "AzureSqlTable",
+    "linkedServiceName": {
+      "referenceName": "azure_sql",
+      "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+      "table": "customers"
+    }
+  }
+}

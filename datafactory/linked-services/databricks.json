@@ -1,0 +1,21 @@
+{
+  "name": "databricks_linked_service",
+  "properties": {
+    "type": "Databricks",
+    "typeProperties": {
+      "domain": ".azuredatabricks.net",
+      "accessToken": "@{linkedService().accessToken}",
+      "workspaceResourceId": "@{linkedService().workspaceResourceId}"
+    },
+    "parameters": {
+      "accessToken": {
+        "type": "SecureString",
+        "description": "Databricks personal access token from Key Vault"
+      },
+      "workspaceResourceId": {
+        "type": "String",
+        "description": "Databricks workspace resource ID"
+      }
+    }
+  }
+}
